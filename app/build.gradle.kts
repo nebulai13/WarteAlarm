@@ -34,6 +34,15 @@ android {
     buildFeatures {
         viewBinding = true
     }
+    // socket.io-client / okhttp bundle a few duplicate license files; drop them so packaging is deterministic.
+    packaging {
+        resources {
+            excludes += setOf(
+                "/META-INF/{AL2.0,LGPL2.1}",
+                "META-INF/DEPENDENCIES",
+            )
+        }
+    }
 }
 
 dependencies {
@@ -44,6 +53,18 @@ dependencies {
     implementation(libs.androidx.navigation.fragment.ktx)
     implementation(libs.androidx.navigation.ui.ktx)
     implementation(libs.material)
+
+    // --- WarteAlarm prototype ---
+    implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.androidx.lifecycle.service)
+    implementation(libs.androidx.lifecycle.viewmodel.ktx)
+    implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.datastore.preferences)
+    // socket.io-client ships its own org.json; exclude it so it doesn't clash with Android's built-in one.
+    implementation(libs.socketio.client) {
+        exclude(group = "org.json", module = "json")
+    }
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)
