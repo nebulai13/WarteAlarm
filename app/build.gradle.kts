@@ -66,6 +66,8 @@ dependencies {
     }
 
     testImplementation(libs.junit)
+    // Real org.json so SnapshotParser (which uses org.json) can be unit-tested on the JVM.
+    testImplementation(libs.json)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)
 }

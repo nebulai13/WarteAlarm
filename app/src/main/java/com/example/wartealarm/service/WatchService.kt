@@ -10,7 +10,6 @@ import android.os.PowerManager
 import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
@@ -121,39 +120,36 @@ class WatchService : LifecycleService() {
      * Comparing against [lastStatus] is what makes each fire exactly once: re-emissions of the same
      * status are skipped because the transition already happened.
      */
-    private fun maybeFireAlarm(status: MyStatus) {
+    private suspend fun maybeFireAlarm(status: MyStatus) {
         val previous = lastStatus
+        val settings = SettingsStore.current(this@WatchService)
 
-        lifecycleScope.launch {
-            val settings = SettingsStore.current(this@WatchService)
-
-            when (status) {
-                is MyStatus.Called -> {
-                    if (previous !is MyStatus.Called) {
-                        AlarmEngine.fireAlarm(this@WatchService, status.desk, settings)
-                        launchFullScreenAlarm(status.desk)
-                    }
+        when (status) {
+            is MyStatus.Called -> {
+                if (previous !is MyStatus.Called) {
+                    AlarmEngine.fireAlarm(this@WatchService, status.desk, settings)
+                    launchFullScreenAlarm(status.desk)
                 }
-
-                is MyStatus.Coarse -> {
-                    // Coarse "reached" is the best "it might be your turn" signal in fallback mode.
-                    val wasReached = (previous as? MyStatus.Coarse)?.reached == true
-                    if (status.reached && !wasReached) {
-                        AlarmEngine.fireAlarm(this@WatchService, desk = null, settings = settings)
-                        launchFullScreenAlarm(desk = null)
-                    }
-                }
-
-                is MyStatus.Waiting -> {
-                    val crossedThreshold = status.ahead <= settings.preAlarmThreshold &&
-                        !wasAtOrBelowPreAlarm(previous, settings.preAlarmThreshold)
-                    if (crossedThreshold) {
-                        AlarmEngine.preAlarm(this@WatchService, settings)
-                    }
-                }
-
-                MyStatus.Skipped, MyStatus.Unknown -> Unit
             }
+
+            is MyStatus.Coarse -> {
+                // Coarse "reached" is the best "it might be your turn" signal in fallback mode.
+                val wasReached = (previous as? MyStatus.Coarse)?.reached == true
+                if (status.reached && !wasReached) {
+                    AlarmEngine.fireAlarm(this@WatchService, desk = null, settings = settings)
+                    launchFullScreenAlarm(desk = null)
+                }
+            }
+
+            is MyStatus.Waiting -> {
+                val crossedThreshold = status.ahead <= settings.preAlarmThreshold &&
+                    !wasAtOrBelowPreAlarm(previous, settings.preAlarmThreshold)
+                if (crossedThreshold) {
+                    AlarmEngine.preAlarm(this@WatchService, settings)
+                }
+            }
+
+            MyStatus.Skipped, MyStatus.Unknown -> Unit
         }
     }
 
@@ -168,14 +164,19 @@ class WatchService : LifecycleService() {
         ensureChannels()
         val notification = buildOngoingNotification(statusLine = "Watching queue for #${params.myNumber}…")
 
-        // Android 14+ requires a declared FGS type at startForeground time. ServiceCompat handles the
-        // version split; the SPECIAL_USE type matches our manifest declaration and constant is API 34.
-        val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+        // Android 10+ (Q) accepts an FGS type on startForeground; Android 14+ requires one. The
+        // SPECIAL_USE type matches our manifest declaration, and its constant only exists from API 34,
+        // so 29–33 fall back to no specific type (0) and pre-29 uses the typeless overload.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+            } else {
+                0
+            }
+            startForeground(ONGOING_NOTIFICATION_ID, notification, type)
         } else {
-            0
+            startForeground(ONGOING_NOTIFICATION_ID, notification)
         }
-        ServiceCompat.startForeground(this, ONGOING_NOTIFICATION_ID, notification, type)
     }
 
     /** Rebuilds and re-posts the ongoing notification to reflect the current [status]. */

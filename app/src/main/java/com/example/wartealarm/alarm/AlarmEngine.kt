@@ -46,6 +46,9 @@ object AlarmEngine {
     private val torchHandler = Handler(Looper.getMainLooper())
     private var torchOn = false
 
+    /** Alarm-stream volume captured before "full system alarm" maxed it, so [stop] can put it back. */
+    private var previousAlarmVolume: Int? = null
+
     /** Vibration waveform for the full alarm: a steady, insistent buzz (off/on/off/on…), looping. */
     private val ALARM_VIBRATION_PATTERN = longArrayOf(0, 600, 400)
 
@@ -110,6 +113,7 @@ object AlarmEngine {
         vibrator = null
 
         stopTorchBlink(context)
+        restoreAlarmVolume(context)
     }
 
     // --- Sound ---------------------------------------------------------------------------------------
@@ -181,8 +185,21 @@ object AlarmEngine {
      */
     private fun raiseAlarmVolume(context: Context) {
         val audio = ContextCompat.getSystemService(context, AudioManager::class.java) ?: return
+        // Capture the user's volume once (not on a re-fire, which would save the already-maxed value) so
+        // STOP can restore it — otherwise their alarm volume would stay pinned at max afterwards.
+        if (previousAlarmVolume == null) {
+            previousAlarmVolume = audio.getStreamVolume(AudioManager.STREAM_ALARM)
+        }
         val max = audio.getStreamMaxVolume(AudioManager.STREAM_ALARM)
         audio.setStreamVolume(AudioManager.STREAM_ALARM, max, /* flags = */ 0)
+    }
+
+    /** Restores the alarm-stream volume captured before [raiseAlarmVolume], if it was changed. */
+    private fun restoreAlarmVolume(context: Context) {
+        val saved = previousAlarmVolume ?: return
+        previousAlarmVolume = null
+        val audio = ContextCompat.getSystemService(context, AudioManager::class.java) ?: return
+        runCatching { audio.setStreamVolume(AudioManager.STREAM_ALARM, saved, /* flags = */ 0) }
     }
 
     // --- Vibration -----------------------------------------------------------------------------------

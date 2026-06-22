@@ -31,6 +31,9 @@ object SettingsStore {
     private val FLASHLIGHT_BLINK = booleanPreferencesKey("flashlight_blink")
     private val FULL_SYSTEM_ALARM = booleanPreferencesKey("full_system_alarm")
 
+    /** Default values, allocated once and reused for every read rather than on each call. */
+    private val DEFAULTS = AlarmSettings()
+
     /** Observes the stored settings, emitting defaults until the user changes anything. */
     fun flow(context: Context): Flow<AlarmSettings> =
         context.applicationContext.settingsDataStore.data.map { it.toAlarmSettings() }
@@ -45,18 +48,15 @@ object SettingsStore {
         }
     }
 
-    private fun Preferences.toAlarmSettings(): AlarmSettings {
-        val defaults = AlarmSettings()
-        return AlarmSettings(
-            preAlarmThreshold = this[PRE_ALARM_THRESHOLD] ?: defaults.preAlarmThreshold,
-            sound = this[SOUND] ?: defaults.sound,
-            soundHeadphonesOnly = this[SOUND_HEADPHONES_ONLY] ?: defaults.soundHeadphonesOnly,
-            vibrate = this[VIBRATE] ?: defaults.vibrate,
-            visualBlink = this[VISUAL_BLINK] ?: defaults.visualBlink,
-            flashlightBlink = this[FLASHLIGHT_BLINK] ?: defaults.flashlightBlink,
-            fullSystemAlarm = this[FULL_SYSTEM_ALARM] ?: defaults.fullSystemAlarm,
-        )
-    }
+    private fun Preferences.toAlarmSettings(): AlarmSettings = AlarmSettings(
+        preAlarmThreshold = this[PRE_ALARM_THRESHOLD] ?: DEFAULTS.preAlarmThreshold,
+        sound = this[SOUND] ?: DEFAULTS.sound,
+        soundHeadphonesOnly = this[SOUND_HEADPHONES_ONLY] ?: DEFAULTS.soundHeadphonesOnly,
+        vibrate = this[VIBRATE] ?: DEFAULTS.vibrate,
+        visualBlink = this[VISUAL_BLINK] ?: DEFAULTS.visualBlink,
+        flashlightBlink = this[FLASHLIGHT_BLINK] ?: DEFAULTS.flashlightBlink,
+        fullSystemAlarm = this[FULL_SYSTEM_ALARM] ?: DEFAULTS.fullSystemAlarm,
+    )
 
     private fun AlarmSettings.writeInto(prefs: androidx.datastore.preferences.core.MutablePreferences) {
         prefs[PRE_ALARM_THRESHOLD] = preAlarmThreshold

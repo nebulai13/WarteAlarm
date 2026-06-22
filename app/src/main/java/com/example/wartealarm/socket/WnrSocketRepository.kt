@@ -62,7 +62,13 @@ class WnrSocketRepository(
         this.room = room
         _connectionState.value = ConnectionState.CONNECTING
 
-        val socket = socket ?: createSocket().also { socket = it }
+        val socket = try {
+            socket ?: createSocket().also { socket = it }
+        } catch (e: IllegalArgumentException) {
+            // A malformed base URL is unrecoverable; surface it via state rather than crashing the watcher.
+            _connectionState.value = ConnectionState.ERROR
+            return
+        }
         registerListeners(socket)
         socket.connect()
     }
@@ -74,6 +80,8 @@ class WnrSocketRepository(
             socket.disconnect()
         }
         _connectionState.value = ConnectionState.DISCONNECTED
+        // Drop the last snapshot so a later connect() for a different room can't briefly surface stale data.
+        _snapshots.value = null
     }
 
     // --- Socket setup ---------------------------------------------------------------------------

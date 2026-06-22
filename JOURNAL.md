@@ -70,6 +70,29 @@ fallback (`tickets == null`), and the `inferMissing` Skipped-vs-Unknown split. B
 check, not a claim. _Behaviour pinned by tests, worth a glance:_ `QueueAnalyzer` treats `finished` the same
 as `redeemed` (both → `Called`), and `cancelled` like `absent` (→ `Skipped`).
 
+### Integration build + fix
+
+First integrated `assembleDebug` failed on one error: `ServiceCompat.startForeground(Service, id, notif, type)`
+only exists in androidx.core **1.12.0+**, but the project pins core-ktx 1.10.1. Fixed in `WatchService` with a
+self-contained version split on the platform `startForeground` (typed overload on API 29+ / typeless below),
+dropping the `ServiceCompat` import — no dependency bump. Rebuild: **BUILD SUCCESSFUL**, `app-debug.apk` (6.9M),
+21 unit tests green.
+
+### Code-review follow-ups (`CodeReview.md`, reviewer: Antigravity)
+
+Applied the correctness/reliability findings; deferred the release-gating ones. Final build after the fixes:
+**BUILD SUCCESSFUL, 32 unit tests pass, 0 failures.**
+- **Fixed** — `WnrSocketRepository.disconnect()` now clears `_snapshots` (no stale data on room change), and
+  `connect()` catches a bad-URL `IllegalArgumentException` → `ConnectionState.ERROR` instead of crashing.
+  `WatchService.maybeFireAlarm` is now a `suspend fun` called inline — no extra coroutine in the alarm critical
+  path, so `lastStatus` only advances after the alarm logic runs. `AlarmEngine` captures the alarm-stream volume
+  before "full system alarm" maxes it and restores it in `stop()`. `SettingsStore` defaults hoisted to one
+  `DEFAULTS` val. Added `SnapshotParserTest` (11 cases) — needed real `org.json` as a `testImplementation`
+  (Android's bundled one is a non-functional stub off-device).
+- **Deferred (with reason)** — renaming off `com.example`, enabling R8, and a custom launcher icon are Play-Store
+  release tasks (R8 also needs socket.io keep-rules first); a `Desk` value type, post-alarm auto-stop, and a
+  `values-de/` German translation are features, not defects. They belong with the spec's release scope.
+
 **B — service + alarm engine.** `WatchService` (LifecycleService): foreground + partial wakelock (3h cap),
 constructs `WnrSocketRepository()`, `combine`s snapshots + connection, analyses each non-null snapshot, and
 publishes status/connection/coarseMode/params to `WatchBus`. Alarms fire on *status transitions* (diffed vs
